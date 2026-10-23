@@ -31,7 +31,10 @@ pub struct ForwardedPacketSender(OverlayToDataplane);
 pub struct ForwardedPacketReceiver(OverlayFromDataplane);
 
 impl ForwardedPackets {
-    pub(crate) fn new(to_dataplane: OverlayToDataplane, from_dataplane: OverlayFromDataplane) -> Self {
+    pub(crate) fn new(
+        to_dataplane: OverlayToDataplane,
+        from_dataplane: OverlayFromDataplane,
+    ) -> Self {
         Self {
             sender: ForwardedPacketSender(to_dataplane),
             receiver: ForwardedPacketReceiver(from_dataplane),

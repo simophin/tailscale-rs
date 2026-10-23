@@ -79,10 +79,10 @@ mod tun_actor;
 pub use device_state::{DeviceState, RegistrationError};
 pub(crate) use env::Env;
 pub use error::{Error, ErrorKind};
+pub use exit_node_suggest::{ExitNodeSuggestion, SuggestExitNodeError};
 pub use forwarded_packets::{
     DataplaneClosed, ForwardedPacketReceiver, ForwardedPacketSender, ForwardedPackets,
 };
-pub use exit_node_suggest::{ExitNodeSuggestion, SuggestExitNodeError};
 pub use ipn_bus::{IpnBusWatcher, Notify, NotifyWatchOpt};
 pub use status::{FileTarget, NetcheckReport, RegionLatency, Status, StatusNode, WhoIs};
 pub use tka_sync::TkaLogEntry;

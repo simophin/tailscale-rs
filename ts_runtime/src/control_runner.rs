@@ -137,6 +137,11 @@ pub struct ControlRunner {
 /// reauth; each subsequent expired self-node while still reauthenticating counts toward this cap.
 const MAX_REAUTH_ATTEMPTS: u32 = 3;
 
+/// The first wait before retrying a registration that failed on the network, doubled on each
+/// further failure up to [`REGISTRATION_BACKOFF_MAX`].
+const REGISTRATION_BACKOFF_MIN: Duration = Duration::from_secs(1);
+const REGISTRATION_BACKOFF_MAX: Duration = Duration::from_secs(30);
+
 impl Drop for ControlRunner {
     fn drop(&mut self) {
         // Stop the re-auth bridge so it does not outlive the actor (mirrors `DataplaneActor`).
@@ -211,6 +216,7 @@ impl kameo::Actor for ControlRunner {
         // `followup` on every subsequent poll so control long-polls ONE stable URL (rather than
         // minting a fresh, racing URL each retry) until the user visits it.
         let mut login_url: Option<url::Url> = None;
+        let mut backoff = REGISTRATION_BACKOFF_MIN;
         loop {
             match AsyncControlClient::check_auth(
                 &params.config,
@@ -270,6 +276,20 @@ impl kameo::Actor for ControlRunner {
                         "control rate-limited registration; waiting before retry"
                     );
                     tokio::time::sleep(retry_after).await;
+                }
+                Err(ControlError::NetworkError(op)) => {
+                    // Control unreachable, or the connection dropped mid-request (e.g. the HTTP
+                    // proxy restarting). Transient, as `RegistrationError::NetworkUnreachable`
+                    // says: back off and retry, as Go's `authRoutine` does, rather than stopping
+                    // the runner and with it the node. The login URL is kept, so a link the user
+                    // already opened stays the one followed.
+                    tracing::warn!(
+                        ?op,
+                        ?backoff,
+                        "control unreachable during registration; retrying"
+                    );
+                    tokio::time::sleep(backoff).await;
+                    backoff = (backoff * 2).min(REGISTRATION_BACKOFF_MAX);
                 }
                 Err(e) => {
                     // Followup auth path gone: while long-polling a STABLE AuthURL, control returns
