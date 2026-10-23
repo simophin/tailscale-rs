@@ -198,7 +198,7 @@ fn send_chunk<P: AsRef<[u8]>>(
             sock.as_raw_fd(),
             msgs.as_mut_ptr(),
             msgs.len() as _,
-            libc::MSG_DONTWAIT,
+            libc::MSG_DONTWAIT as _,
         )
     };
     if n < 0 {
