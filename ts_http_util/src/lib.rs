@@ -14,6 +14,7 @@ mod client;
 mod error;
 pub mod http1;
 pub mod http2;
+pub mod proxy;
 
 pub use client::{Client, ClientExt};
 pub use error::Error;
@@ -179,12 +180,13 @@ pub fn host_header(u: &url::Url) -> Option<(HeaderName, HeaderValue)> {
 }
 
 async fn dial_tcp(url: &url::Url) -> Result<TcpStream, Error> {
-    let conn = TcpStream::connect((
+    let conn = proxy::connect(
         url.host_str().ok_or(Error::InvalidInput)?,
         url.port_or_known_default()
             .ok_or(Error::InvalidInput)
             .inspect_err(|_err| tracing::error!("unknown url port"))?,
-    ))
+        matches!(url.scheme(), "https" | "wss"),
+    )
     .await
     .map_err(|e| {
         tracing::error!(error = %e, %url, "dialing tcp");

@@ -149,6 +149,15 @@ pub async fn dial_region_tcp<'c>(
 ///
 /// Returns `None` iff the server has both IPv4 and IPv6 configured as [`IpUsage::Disable`].
 pub async fn dial_server(server: &ServerConnInfo) -> Result<Option<TcpStream>, Error> {
+    // DERP is TLS: through the environment's HTTPS proxy, when it applies, by name.
+    if let Some(proxy) =
+        ts_http_util::proxy::proxy_for(&server.hostname, true, |k| std::env::var(k).ok())
+    {
+        return Ok(Some(
+            ts_http_util::proxy::connect_via(&proxy, &server.hostname, server.https_port).await?,
+        ));
+    }
+
     let mut js = JoinSet::new();
 
     // TODO(npry): respect ipv6 preference. The go client just adds a flat 200ms sleep to

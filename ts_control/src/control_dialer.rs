@@ -80,7 +80,8 @@ impl Debug for ControlTcpDialer<'_> {
 impl TcpDialer for ControlTcpDialer<'_> {
     async fn dial(self, host: &str, port: u16) -> tokio::io::Result<TcpStream> {
         match self {
-            ControlTcpDialer::UseDns => TcpStream::connect(format!("{host}:{port}")).await,
+            // Port 443 carries TLS; the control protocol's port 80 does not.
+            ControlTcpDialer::UseDns => ts_http_util::proxy::connect(host, port, port == 443).await,
             ControlTcpDialer::Planned {
                 candidate,
                 attempted: used,
@@ -89,6 +90,18 @@ impl TcpDialer for ControlTcpDialer<'_> {
                 used.set(index);
 
                 match candidate.mode {
+                    // Through a proxy the host is dialled by name, as Go does: the plan's address
+                    // is one this host may not be able to reach.
+                    DialMode::Ip(_)
+                        if let Some(proxy) =
+                            ts_http_util::proxy::proxy_for(host, port == 443, |k| {
+                                std::env::var(k).ok()
+                            }) =>
+                    {
+                        ts_http_util::proxy::connect_via(&proxy, host, port)
+                            .timeout(candidate.timeout)
+                            .await?
+                    }
                     DialMode::Ip(ip) => {
                         TcpStream::connect((ip, port))
                             .timeout(candidate.timeout)

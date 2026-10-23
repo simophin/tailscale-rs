@@ -2151,6 +2151,7 @@ dependencies = [
 name = "geiserx_ts_http_util"
 version = "0.58.2"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "futures",
  "geiserx_ts_tls_util",

@@ -18,6 +18,7 @@ name = "ts_http_util"
 ts_tls_util.workspace = true
 
 # Unconditionally required dependencies.
+base64.workspace = true
 bytes.workspace = true
 futures.workspace = true
 http.workspace = true
