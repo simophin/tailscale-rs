@@ -39,6 +39,7 @@ mod error;
 pub mod exit_node_suggest;
 /// Fallback TCP handler registry (`tsnet.Server.RegisterFallbackTCPHandler` parity).
 pub mod fallback_tcp;
+mod forwarded_packets;
 mod forwarder_actor;
 /// Client-side Funnel ingress termination (`tsnet`'s `ListenFunnel` data path).
 pub mod funnel;
@@ -78,6 +79,9 @@ mod tun_actor;
 pub use device_state::{DeviceState, RegistrationError};
 pub(crate) use env::Env;
 pub use error::{Error, ErrorKind};
+pub use forwarded_packets::{
+    DataplaneClosed, ForwardedPacketReceiver, ForwardedPacketSender, ForwardedPackets,
+};
 pub use exit_node_suggest::{ExitNodeSuggestion, SuggestExitNodeError};
 pub use ipn_bus::{IpnBusWatcher, Notify, NotifyWatchOpt};
 pub use status::{FileTarget, NetcheckReport, RegionLatency, Status, StatusNode, WhoIs};
@@ -150,6 +154,9 @@ pub struct Runtime {
     /// the startup config. [`Runtime::set_advertise_routes`] and [`set_advertise_exit_node`] each
     /// mutate their part under this lock then re-send the composed set, so the two compose.
     advertise: std::sync::Mutex<AdvertiseState>,
+    /// The forwarded traffic's packets with [`ts_control::Config::external_forwarder`], until
+    /// [`Runtime::take_forwarded_packets`] hands them out.
+    forwarded_packets: std::sync::Mutex<Option<ForwardedPackets>>,
     /// The most recent exit-node suggestion's stable id (Go `LocalBackend.lastSuggestedExitNode`),
     /// remembered across calls so [`Runtime::suggest_exit_node`] can apply *stickiness* — if the
     /// previously-suggested node is still an eligible candidate in the winning region it is kept, to
@@ -266,6 +273,15 @@ impl Runtime {
         // `route_updater`), keeping forwarded flows off the application netstack.
         let (forwarder_id, forwarder_up, forwarder_down) =
             dataplane.ask(dataplane::NewOverlayTransport).await?;
+        // With an external forwarder, forwarded routes go to a third transport the embedder
+        // drains instead. The forwarder netstack still runs, as the TUN path and MagicDNS reuse
+        // its channel, but no route leads to it.
+        let (forwarded_id, forwarded_packets) = if config.external_forwarder {
+            let (id, up, down) = dataplane.ask(dataplane::NewOverlayTransport).await?;
+            (id, Some(ForwardedPackets::new(up, down)))
+        } else {
+            (forwarder_id, None)
+        };
 
         // The selected DERP home region (Go `report.PreferredDERP`): the control runner is the sole
         // writer (it applies the netcheck `bestRecent` + hysteresis smoothing), and `Multiderp`
@@ -321,7 +337,7 @@ impl Runtime {
             direct.clone(),
             env.clone(),
             netstack_id,
-            forwarder_id,
+            forwarded_id,
             active_exit_tx,
         ));
         security.watch(&route_updater);
@@ -551,6 +567,7 @@ impl Runtime {
             cap_grants_rx,
             invalid_filter_rx,
             advertise,
+            forwarded_packets: std::sync::Mutex::new(forwarded_packets),
             prev_suggestion: std::sync::Mutex::new(None),
             taildrop_reaper,
             #[cfg(feature = "network-monitor")]
@@ -558,6 +575,12 @@ impl Runtime {
             #[cfg(feature = "portmapper")]
             portmap,
         })
+    }
+
+    /// The packets of forwarded (subnet-route and exit-node) traffic, for an embedder that set
+    /// [`ts_control::Config::external_forwarder`]. `None` without it, and after the first call.
+    pub fn take_forwarded_packets(&self) -> Option<ForwardedPackets> {
+        self.forwarded_packets.lock().unwrap().take()
     }
 
     /// The port mapper's state, or `None` when it does not run (disabled, or a build without the

@@ -316,6 +316,12 @@ pub struct Config {
     /// make Funnel live.
     pub wire_ingress: bool,
 
+    /// Whether this program forwards the node's subnet-route and exit-node traffic itself, as raw
+    /// IP packets from [`Device::take_forwarded_packets`](crate::Device::take_forwarded_packets),
+    /// instead of the built-in forwarder. The forwarder's dialers and anti-leak checks then do not
+    /// apply to that traffic. Defaults to `false`.
+    pub external_forwarder: bool,
+
     /// VIP services this node advertises that it **hosts** (`svc:<dns-label>` names), the advertise
     /// side of Tailscale VIP services (Go `tsnet`'s `Hostinfo.ServicesHash` + c2n
     /// `GET /vip-services`).
@@ -711,6 +717,7 @@ impl From<&Config> for ts_control::Config {
             port_mapper: value.port_mapper.clone(),
             transport_mode: value.transport_mode.clone(),
             wire_ingress: value.wire_ingress,
+            external_forwarder: value.external_forwarder,
             // A fresh runtime-local flag (default `false`): the runtime flips it when
             // `Device::listen_funnel` starts a listener. Not derived from the embedder config.
             ingress_active: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -763,6 +770,7 @@ impl Default for Config {
             port_mapper: ts_control::PortMapperOptions::default(),
             transport_mode: ts_control::TransportMode::default(),
             wire_ingress: false,
+            external_forwarder: false,
             advertise_services: vec![],
             advertise_app_connector: false,
             auto_update_apply: None,
@@ -816,6 +824,7 @@ mod tests {
                 renew_while_idle: true,
             },
             wire_ingress: true,
+            external_forwarder: true,
             transport_mode: ts_control::TransportMode::Tun(ts_control::TunConfig {
                 name: Some("tailscale0".to_owned()),
                 mtu: Some(1280),
@@ -881,6 +890,7 @@ mod tests {
         assert!(!control.port_mapper.advertise_nonpublic_external);
         assert!(control.port_mapper.gateway_override.is_some());
         assert!(control.wire_ingress);
+        assert!(control.external_forwarder, "external_forwarder crosses");
         assert_eq!(control.advertise_services, vec!["svc:samba".to_owned()]);
         assert_eq!(
             control.taildrop_dir,

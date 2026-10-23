@@ -193,6 +193,10 @@ pub use ts_runtime::fallback_tcp::{
 #[doc(inline)]
 pub use ts_runtime::taildrop::WaitingFile;
 #[doc(inline)]
+pub use ts_packet::PacketMut;
+pub use ts_runtime::{
+    DataplaneClosed, ForwardedPacketReceiver, ForwardedPacketSender, ForwardedPackets,
+};
 pub use ts_runtime::{
     DeviceState, DnsQueryResult, ExitNodeSuggestion, FileTarget, IpnBusWatcher, NetcheckReport,
     Notify, NotifyWatchOpt, PortMapFacets, PortMapStatus, RegionLatency, RegistrationError, Status,
@@ -1305,6 +1309,14 @@ impl Device {
     /// `portmapper` feature).
     pub fn port_map_status(&self) -> Option<PortMapStatus> {
         self.runtime.port_map_status()
+    }
+
+    /// The raw IP packets of this node's forwarded traffic (to its advertised subnet routes and,
+    /// as an exit node, the internet), when [`Config::external_forwarder`] is set: the program
+    /// forwards them itself and sends the replies back. `None` without it, and after the first
+    /// call.
+    pub fn take_forwarded_packets(&self) -> Option<ForwardedPackets> {
+        self.runtime.take_forwarded_packets()
     }
 
     /// Fetch the current Tailnet Lock (TKA) status pushed by control, if any.

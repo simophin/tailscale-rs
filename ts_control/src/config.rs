@@ -480,6 +480,17 @@ pub struct Config {
     #[serde(default)]
     pub wire_ingress: bool,
 
+    /// Whether the embedder forwards this node's subnet-route and exit-node traffic itself.
+    ///
+    /// When `true`, inbound packets for advertised subnet routes and the exit-node default routes
+    /// are handed to the embedder as raw IP packets (`Runtime::take_forwarded_packets`) instead of
+    /// the built-in forwarder netstack, and the packets the embedder sends back are routed to peers
+    /// by destination like any overlay traffic. The embedder then owns egress entirely: the
+    /// forwarder's dialers, port gates and anti-leak checks do not see these flows. Defaults to
+    /// `false`.
+    #[serde(default)]
+    pub external_forwarder: bool,
+
     /// Live signal that this node currently has an active Funnel ingress listener
     /// (`Device::listen_funnel` was called and its listener is up), driving `HostInfo.IngressEnabled`
     /// on the streaming map request.
@@ -890,6 +901,7 @@ impl Default for Config {
             persistent_keepalive_interval: default_persistent_keepalive(),
             transport_mode: TransportMode::default(),
             wire_ingress: false,
+            external_forwarder: false,
             ingress_active: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             advertise_services: Vec::new(),
             advertise_app_connector: false,
