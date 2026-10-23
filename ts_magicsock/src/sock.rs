@@ -2073,6 +2073,23 @@ impl MagicSock {
                 rest = &pkts[sent..];
             }
         }
+        // Linux: the rest of the batch in one sendmmsg on the shared socket, with UDP GSO.
+        #[cfg(target_os = "linux")]
+        if rest.len() > 1
+            && crate::send_batch::usable()
+            && !self.only_tcp_443()
+            && let Some(addr) = self.best_addr(peer)
+        {
+            let sock = self.sock().await;
+            let sent = crate::send_batch::send_to(&sock, addr, rest).await;
+            let m = crate::metrics::metrics();
+            for p in &rest[..sent] {
+                m.send_udp.inc();
+                m.send_udp_bytes.add(p.as_ref().len() as i64);
+                self.note_shared_sent(addr, p.as_ref().len(), &sock);
+            }
+            rest = &rest[sent..];
+        }
         for p in rest {
             match self.send_wireguard(peer, p.as_ref()).await {
                 Ok(()) => {}

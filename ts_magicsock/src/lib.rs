@@ -39,6 +39,8 @@ mod path;
 mod receive_batch;
 mod reflexive;
 mod relay;
+#[cfg(target_os = "linux")]
+mod send_batch;
 mod sock;
 mod stun;
 
